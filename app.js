@@ -13,7 +13,7 @@ var PORT = process.env.PORT || 8888;
 
 var client_id = '4553b87393ad47fcb7e22bda6e2c8b4d';
 var client_secret = '9705be4d156346139ab83e4c8fd0c9ae';
-var redirect_uri = 'https://all-tunes-server.herokuapp.com:'+PORT+'/callback';
+var redirect_uri = 'https://all-tunes-server.herokuapp.com/callback';
 
 /**
  * Generates a random string containing numbers and letters
