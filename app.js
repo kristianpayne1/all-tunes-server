@@ -9,10 +9,11 @@ var crypto = require('crypto');
 var SpotifyWebApi = require('spotify-web-api-node');
 
 // SPOTIFY WEB API
+var PORT = process.env.PORT || 8888;
 
 var client_id = '4553b87393ad47fcb7e22bda6e2c8b4d';
 var client_secret = '9705be4d156346139ab83e4c8fd0c9ae';
-var redirect_uri = 'http://localhost:8888/callback';
+var redirect_uri = 'https://all-tunes-server.herokuapp.com:'+PORT+'/callback';
 
 /**
  * Generates a random string containing numbers and letters
@@ -102,7 +103,7 @@ app.get('/callback', function (req, res) {
                 });
 
                 // we can also pass the token to the browser to make requests from there
-                res.redirect('http://localhost:3000/#/home/$' +
+                res.redirect('https://kristianpayne1.github.io/all-tunes-client/#/home/$' +
                     querystring.stringify({
                         access_token: access_token,
                         refresh_token: refresh_token
@@ -454,5 +455,5 @@ function leaveParty(ws) {
     }
 };
 
-console.log('Listening on 8888');
-app.listen(8888);
+console.log('Listening on ' + PORT);
+app.listen(PORT);
