@@ -12,8 +12,8 @@ var SpotifyWebApi = require('spotify-web-api-node');
 var PORT = process.env.PORT || 8888;
 
 var client_id = '4553b87393ad47fcb7e22bda6e2c8b4d';
-var client_secret = '9705be4d156346139ab83e4c8fd0c9ae';
-var redirect_uri = 'https://all-tunes-server.herokuapp.com/callback';
+var client_secret = process.env.CLIENT_SECRET;
+var redirect_uri = 'http://localhost:8888/callback';
 
 /**
  * Generates a random string containing numbers and letters
@@ -99,15 +99,18 @@ app.get('/callback', function (req, res) {
 
                 // use the access token to access the Spotify Web API
                 request.get(options, function (error, response, body) {
-                    console.log(body);
+                    console.log("User: " + body.id + " has logged in");
+                    var id = body.id;
+
+                    // we can also pass the token to the browser to make requests from there
+                    res.redirect('http://localhost:3000/#/home/$' +
+                        querystring.stringify({
+                            id: id,
+                            access_token: access_token,
+                            refresh_token: refresh_token
+                        }));
                 });
 
-                // we can also pass the token to the browser to make requests from there
-                res.redirect('https://kristianpayne1.github.io/all-tunes-client/#/home/$' +
-                    querystring.stringify({
-                        access_token: access_token,
-                        refresh_token: refresh_token
-                    }));
             } else {
                 res.redirect('/#' +
                     querystring.stringify({
@@ -152,11 +155,16 @@ let partyHost = new Map();
 
 app.ws('/', function (ws, req) {
     ws.ip = req.socket.remoteAddress;
+    ws.id = '';
     ws.inParty = false;
     ws.partyCode = '';
     ws.spotifyWebApi = new SpotifyWebApi();
     ws.access_token = '';
+    ws.refresh_token = '';
     ws.topArtists = [];
+    ws.isAlive = true;
+
+    ws.on('pong', heartbeat);
 
     // ask client for the spotify access_token
     let response = {
@@ -169,9 +177,18 @@ app.ws('/', function (ws, req) {
         var data = JSON.parse(message);
         switch (data.messageType) {
             case 'ACCESS_TOKEN': {
-                if (data.access_token) {
+                if (data.access_token && data.refresh_token && data.id ) {
+                    ws.id = data.id;
                     ws.spotifyWebApi.setAccessToken(data.access_token);
+                    ws.spotifyWebApi.setRefreshToken(data.refresh_token);
                     ws.access_token = data.access_token;
+                    ws.refresh_token = data.refresh_token;
+                }else{
+                    const response = {
+                        messageType: 'FAILED_ACCESS_TOKEN',
+                        errorMsg: 'No access token'
+                    };
+                    ws.send(JSON.stringify(response));
                 }
             }
                 break;
@@ -184,6 +201,7 @@ app.ws('/', function (ws, req) {
                 // create party 
                 parties.set(ws.partyCode, [ws]);
                 partyHost.set(ws.partyCode, ws);
+                ws.inParty = true;
 
                 // respond to host with party code
                 const response = {
@@ -198,10 +216,10 @@ app.ws('/', function (ws, req) {
                 break;
             case 'JOIN_PARTY_REQUEST': {
                 if (parties.has(data.partyCode)) {
-                    if (isClientInParty(data.partyCode, ws.ip)) {
+                    if (isClientInParty(data.partyCode, ws.id)) {
                         ws.partyCode = data.partyCode;
 
-                        console.log("Client: " + ws.ip + " joined party: " + ws.partyCode);
+                        console.log("Client: " + ws.id + " joined party: " + ws.partyCode);
 
                         // add client to party
                         ws.inParty = true;
@@ -233,8 +251,8 @@ app.ws('/', function (ws, req) {
                 }
             }
                 break;
-            case 'QUEUE_SONG' : {
-                console.log('Queue song: '+data.uri);
+            case 'QUEUE_SONG': {
+                console.log('Queue song: ' + data.uri);
 
                 var queueOptions = {
                     url: 'https://api.spotify.com/v1/me/player/queue',
@@ -250,19 +268,36 @@ app.ws('/', function (ws, req) {
                 request.post(queueOptions, function (error, response, body) {
                     if (!error && response.statusCode === 204) {
                         console.log('Song queued');
-                    }else{
+                    } else {
                         console.log('Failed to queue song. Error code: ' + response.statusCode);
                     }
                 });
             }
-            break;
-            case 'DISCONNECTED': {
+                break;
+            case 'DISCONNECT': {
                 leaveParty(ws);
             }
                 break;
         }
     });
 });
+
+function noop() {}
+
+function heartbeat() {
+    //console.log('pong');
+    this.isAlive = true;
+}
+
+const interval = setInterval(function ping() {
+    var wsClients = expressWs.getWss().clients;
+    wsClients.forEach(function each(ws) {
+        if(ws.isAlive === false) return ws.terminate();
+        //console.log('ping');
+        ws.isAlive = false;
+        ws.ping(noop);
+    });
+}, 30000);
 
 function updateParty(partyCode) {
     //TODO: OPTIMISE THIS!!
@@ -389,7 +424,7 @@ function loadRecommendedSongs(host, genreArtistMap, topGenres) {
     Promise.all(songArray).then((songs) => {
         let genreSong = [];
         for (let i = 0; i < topGenres.length; i++) {
-            genreSong.push({genre: topGenres[i], songs : songs[i]});
+            genreSong.push({ genre: topGenres[i], songs: songs[i] });
         }
         sendUpdatedRecommended(genreSong, host);
     })
@@ -437,23 +472,40 @@ function sendUpdatedRecommended(genreSong, host) {
     host.send(JSON.stringify(message));
 }
 
-function isClientInParty(party, ip) {
+function isClientInParty(party, id) {
     const clients = parties.get(party);
     if (clients === undefined) {
         return false;
     } else {
-        return clients.find((item) => item.ip === ip) ? true : false;
+        return clients.find((item) => item.id === id) ? true : false;
     }
 };
 
 function leaveParty(ws) {
     if (ws.inParty === true) {
-        // Remove the player from the party
-        const clients = parties.get(ws.party);
-        clients.splice(clients.indexOf(ws.ip), 1);
-        parties.set(ws.party, clients);
+        if (partyHost.get(ws.partyCode) === ws) {
+            closeParty(ws.partyCode);
+        } else {
+            // Remove the player from the party
+            var clients = parties.get(ws.partyCode);
+            clients.splice(clients.indexOf(ws.id), 1);
+            parties.set(ws.partyCode, clients);
+        }
     }
 };
+
+function closeParty(partyCode) {
+    var clients = parties.get(partyCode);
+    clients.forEach(client => {
+        const message = {
+            messageType: 'DISCONNECT',
+        };
+        client.send(JSON.stringify(message));
+    });
+    parties.delete(partyCode);
+    partyHost.delete(partyCode);
+    console.log('Closed party: ' + partyCode);
+}
 
 console.log('Listening on ' + PORT);
 app.listen(PORT);
