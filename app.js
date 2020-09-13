@@ -13,7 +13,7 @@ var PORT = process.env.PORT || 8888;
 
 var client_id = '4553b87393ad47fcb7e22bda6e2c8b4d';
 var client_secret = process.env.CLIENT_SECRET;
-var redirect_uri = 'http://localhost:8888/callback';
+var redirect_uri = 'https://all-tunes-server.herokuapp.com/callback';
 
 /**
  * Generates a random string containing numbers and letters
@@ -103,7 +103,7 @@ app.get('/callback', function (req, res) {
                     var id = body.id;
 
                     // we can also pass the token to the browser to make requests from there
-                    res.redirect('http://localhost:3000/#/home/$' +
+                    res.redirect('https://kristianpayne1.github.io/all-tunes-client/#/home/$' +
                         querystring.stringify({
                             id: id,
                             access_token: access_token,
