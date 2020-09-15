@@ -216,7 +216,7 @@ app.ws('/', function (ws, req) {
                 break;
             case 'JOIN_PARTY_REQUEST': {
                 if (parties.has(data.partyCode)) {
-                    if (isClientInParty(data.partyCode, ws.id)) {
+                    if (!(isClientInParty(data.partyCode, ws.id))) {
                         ws.partyCode = data.partyCode;
 
                         console.log("Client: " + ws.id + " joined party: " + ws.partyCode);
@@ -474,7 +474,6 @@ function sendUpdatedRecommended(genreSong, host) {
 
 function isClientInParty(party, id) {
     let clients = parties.get(party);
-    console.log(clients);
     if (clients === undefined) {
         return false;
     } else {
