@@ -473,7 +473,8 @@ function sendUpdatedRecommended(genreSong, host) {
 }
 
 function isClientInParty(party, id) {
-    const clients = parties.get(party);
+    let clients = parties.get(party);
+    console.log(clients);
     if (clients === undefined) {
         return false;
     } else {
